@@ -3,6 +3,8 @@ from urllib.parse import urlparse
 from lxml import html
 from urllib.parse import urljoin
 
+HIGH_INFO_THRESHOLD = .15
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
@@ -17,16 +19,23 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+    # check if resp.raw_response exists and is not None
+    
     absolute_urls = []
-    parsed_html = html.fromstring(resp.raw_response.content)
 
-    # Extract all URLs
-    urls = parsed_html.xpath('//a/@href')
+    # First ensure the raw_response attribute is there
+    if resp.raw_response:
+        parsed_html = html.fromstring(resp.raw_response.content)
 
-    # Convert relative URLs to absolute URLs
-    for href in urls:
-        abs_url = urljoin(url, href)
-        absolute_urls.append(abs_url)
+        # Extract all URLs
+        urls = parsed_html.xpath('//a/@href')
+
+        # Convert relative URLs to absolute URLs
+        # Edit: added is_high_info function to check if there is low information value
+        for href in urls:
+            abs_url = urljoin(url, href)
+            if is_valid(abs_url) and is_high_info(resp.raw_response.content):
+                absolute_urls.append(abs_url)
 
     return absolute_urls
 
@@ -56,3 +65,17 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+    
+# Ensure that the content from the webpage provides a reasonable amount of information
+# Should prevent crawling large files that provide little textual info
+def is_high_info(content):
+    text_content = html.fromstring(content).text_content()
+    text_length = len(text_content)
+    html_length = len(content)
+
+    # If no information return False
+    if html_length == 0:
+        return False
+
+    ratio = text_length / html_length
+    return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
