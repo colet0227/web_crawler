@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse
-from lxml import html
+# from lxml import html
+from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 HIGH_INFO_THRESHOLD = .10
@@ -20,13 +21,15 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
     # First ensure the raw_response attribute is there and not empty
-    absolute_urls = []
     
+    absolute_urls = []
+
+    # First ensure the raw_response attribute is there and not empty
     if resp.raw_response and resp.raw_response.content:
-        parsed_html = html.fromstring(resp.raw_response.content)
+        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
         # Extract all URLs
-        urls = parsed_html.xpath('//a/@href')
+        urls = [a['href'] for a in soup.find_all('a', href=True)]
 
         # Convert relative URLs to absolute URLs
         for href in urls:
