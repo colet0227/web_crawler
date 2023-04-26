@@ -1,9 +1,9 @@
 import re
 from urllib.parse import urlparse
-from lxml import html
+from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-HIGH_INFO_THRESHOLD = .15
+HIGH_INFO_THRESHOLD = .10
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -19,19 +19,16 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    # check if resp.raw_response exists and is not None
-    
-    absolute_urls = []
+absolute_urls = []
 
-    # First ensure the raw_response attribute is there
-    if resp.raw_response:
-        parsed_html = html.fromstring(resp.raw_response.content)
+    # First ensure the raw_response attribute is there and not empty
+    if resp.raw_response and resp.raw_response.content:
+        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
         # Extract all URLs
-        urls = parsed_html.xpath('//a/@href')
+        urls = [a['href'] for a in soup.find_all('a', href=True)]
 
         # Convert relative URLs to absolute URLs
-        # Edit: added is_high_info function to check if there is low information value
         for href in urls:
             abs_url = urljoin(url, href)
             if is_valid(abs_url) and is_high_info(resp.raw_response.content):
@@ -63,5 +60,19 @@ def is_valid(url):
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
     except TypeError:
-        print ("TypeError for ", parsed)
+        print("TypeError for ", parsed)
         raise
+    
+# Ensure that the content from the webpage provides a reasonable amount of information
+# Should prevent crawling large files that provide little textual info
+def is_high_info(content):
+    text_content = html.fromstring(content).text_content()
+    text_length = len(text_content)
+    html_length = len(content)
+
+    # If no information return False
+    if html_length == 0:
+        return False
+
+    ratio = text_length / html_length
+    return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
