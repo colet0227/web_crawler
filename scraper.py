@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from lxml import html
 from urllib.parse import urljoin
 
-HIGH_INFO_THRESHOLD = .15
+HIGH_INFO_THRESHOLD = .10
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -19,19 +19,16 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    # check if resp.raw_response exists and is not None
-    
+    # First ensure the raw_response attribute is there and not empty
     absolute_urls = []
-
-    # First ensure the raw_response attribute is there
-    if resp.raw_response:
+    
+    if resp.raw_response and resp.raw_response.content:
         parsed_html = html.fromstring(resp.raw_response.content)
 
         # Extract all URLs
         urls = parsed_html.xpath('//a/@href')
 
         # Convert relative URLs to absolute URLs
-        # Edit: added is_high_info function to check if there is low information value
         for href in urls:
             abs_url = urljoin(url, href)
             if is_valid(abs_url) and is_high_info(resp.raw_response.content):
@@ -63,7 +60,7 @@ def is_valid(url):
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
     except TypeError:
-        print ("TypeError for ", parsed)
+        print("TypeError for ", parsed)
         raise
     
 # Ensure that the content from the webpage provides a reasonable amount of information
