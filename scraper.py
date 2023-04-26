@@ -1,4 +1,5 @@
 import re
+import hashlib
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -19,20 +20,25 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-absolute_urls = []
+    absolute_urls = []
 
-    # First ensure the raw_response attribute is there and not empty
     if resp.raw_response and resp.raw_response.content:
         soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
         # Extract all URLs
         urls = [a['href'] for a in soup.find_all('a', href=True)]
 
-        # Convert relative URLs to absolute URLs
+        seen_hashes = set()
+
         for href in urls:
             abs_url = urljoin(url, href)
-            if is_valid(abs_url) and is_high_info(resp.raw_response.content):
-                absolute_urls.append(abs_url)
+            if is_valid(abs_url):
+                content = resp.raw_response.content
+                content_hash = hashlib.md5(content).hexdigest()
+
+                if content_hash not in seen_hashes and is_high_info(content):
+                    absolute_urls.append(abs_url)
+                    seen_hashes.add(content_hash)
 
     return absolute_urls
 
@@ -66,7 +72,8 @@ def is_valid(url):
 # Ensure that the content from the webpage provides a reasonable amount of information
 # Should prevent crawling large files that provide little textual info
 def is_high_info(content):
-    text_content = html.fromstring(content).text_content()
+    soup = BeautifulSoup(content, 'html.parser')
+    text_content = soup.get_text()
     text_length = len(text_content)
     html_length = len(content)
 
