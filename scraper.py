@@ -2,12 +2,15 @@ import re
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+import requests
 
 HIGH_INFO_THRESHOLD = .10
+
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
+
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -22,22 +25,23 @@ def extract_next_links(url, resp):
     absolute_urls = []
 
     # First ensure the raw_response attribute is there and not empty
-    if resp.raw_response and resp.raw_response.content:
-        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+    # if resp.raw_response and resp.raw_response.content:
+    soup = BeautifulSoup(resp.content, 'html.parser')
 
-        # Extract all URLs
-        urls = [a['href'] for a in soup.find_all('a', href=True)]
-
-        # Convert relative URLs to absolute URLs
-        for href in urls:
-            abs_url = urljoin(url, href)
-            if is_valid(abs_url) and is_high_info(resp.raw_response.content):
-                absolute_urls.append(abs_url)
-
+    # Extract all URLs
+    urls = [a['href'] for a in soup.find_all('a', href=True)]
+    # print(urls)
+    # Convert relative URLs to absolute URLs
+    # print(urls)
+    for href in urls:
+        abs_url = urljoin(url, href)
+        if is_valid(abs_url) and is_high_info(resp.content) and absolute_urls.count(abs_url) == 0:
+            absolute_urls.append(abs_url)
     return absolute_urls
 
+
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
+    # Decide whether to crawl this url or not.
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
     try:
@@ -46,7 +50,7 @@ def is_valid(url):
             return False
 
         # Ensure they are apart of the allowed domains
-        if not(parsed.hostname.lower().endswith("ics.uci.edu") or parsed.hostname.lower().endswith("cs.uci.edu") or parsed.hostname.lower().endswith("informatics.uci.edu") or parsed.hostname.lower().endswith("stat.uci.edu")):
+        if not (parsed.hostname.lower().endswith("ics.uci.edu") or parsed.hostname.lower().endswith("cs.uci.edu") or parsed.hostname.lower().endswith("informatics.uci.edu") or parsed.hostname.lower().endswith("stat.uci.edu")):
             return False
 
         return not re.match(
@@ -62,11 +66,13 @@ def is_valid(url):
     except TypeError:
         print("TypeError for ", parsed)
         raise
-    
+
+
 # Ensure that the content from the webpage provides a reasonable amount of information
 # Should prevent crawling large files that provide little textual info
 def is_high_info(content):
-    text_content = html.fromstring(content).text_content()
+    soup = BeautifulSoup(content, 'html.parser')
+    text_content = soup.get_text()
     text_length = len(text_content)
     html_length = len(content)
 
@@ -75,4 +81,12 @@ def is_high_info(content):
         return False
 
     ratio = text_length / html_length
-    return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
+    # return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
+    return True
+
+
+url = "http://www.stat.uci.edu"
+resp = requests.get(url)
+urls = scraper(url, resp)
+print(urls)
+print(len(urls))
