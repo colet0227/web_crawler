@@ -38,3 +38,22 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+<<<<<<< Updated upstream
+=======
+    
+# Ensure that the content from the webpage provides a reasonable amount of information
+# Should prevent crawling large files that provide little textual info
+def is_high_info(content):
+    text_content = html.fromstring(content).text_content()
+    text_length = len(text_content)
+    html_length = len(content)
+
+    # If no information return False
+    if html_length == 0:
+        return False
+
+    ratio = text_length / html_length
+    return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
+
+# Look for traps to put in is_valid function
+>>>>>>> Stashed changes
