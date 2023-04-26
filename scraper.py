@@ -1,6 +1,5 @@
 import re
 from urllib.parse import urlparse
-# from lxml import html
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
@@ -20,9 +19,7 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    # First ensure the raw_response attribute is there and not empty
-    
-    absolute_urls = []
+absolute_urls = []
 
     # First ensure the raw_response attribute is there and not empty
     if resp.raw_response and resp.raw_response.content:
