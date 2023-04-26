@@ -1,5 +1,9 @@
 import re
 from urllib.parse import urlparse
+from lxml import html
+from urllib.parse import urljoin
+
+HIGH_INFO_THRESHOLD = .15
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,7 +19,25 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    # check if resp.raw_response exists and is not None
+    
+    absolute_urls = []
+
+    # First ensure the raw_response attribute is there
+    if resp.raw_response:
+        parsed_html = html.fromstring(resp.raw_response.content)
+
+        # Extract all URLs
+        urls = parsed_html.xpath('//a/@href')
+
+        # Convert relative URLs to absolute URLs
+        # Edit: added is_high_info function to check if there is low information value
+        for href in urls:
+            abs_url = urljoin(url, href)
+            if is_valid(abs_url) and is_high_info(resp.raw_response.content):
+                absolute_urls.append(abs_url)
+
+    return absolute_urls
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -25,6 +47,11 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+
+        # Ensure they are apart of the allowed domains
+        if not(parsed.hostname.lower().endswith("ics.uci.edu") or parsed.hostname.lower().endswith("cs.uci.edu") or parsed.hostname.lower().endswith("informatics.uci.edu") or parsed.hostname.lower().endswith("stat.uci.edu")):
+            return False
+
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
@@ -38,22 +65,3 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
-<<<<<<< Updated upstream
-=======
-    
-# Ensure that the content from the webpage provides a reasonable amount of information
-# Should prevent crawling large files that provide little textual info
-def is_high_info(content):
-    text_content = html.fromstring(content).text_content()
-    text_length = len(text_content)
-    html_length = len(content)
-
-    # If no information return False
-    if html_length == 0:
-        return False
-
-    ratio = text_length / html_length
-    return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
-
-# Look for traps to put in is_valid function
->>>>>>> Stashed changes
