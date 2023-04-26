@@ -1,4 +1,5 @@
 import re
+import hashlib
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -23,20 +24,27 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
     absolute_urls = []
+    unique_urls = set()
 
-    # First ensure the raw_response attribute is there and not empty
-    # if resp.raw_response and resp.raw_response.content:
-    soup = BeautifulSoup(resp.content, 'html.parser')
+    if resp.raw_response and resp.raw_response.content:
+        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
-    # Extract all URLs
-    urls = [a['href'] for a in soup.find_all('a', href=True)]
-    # print(urls)
-    # Convert relative URLs to absolute URLs
-    # print(urls)
-    for href in urls:
-        abs_url = urljoin(url, href)
-        if is_valid(abs_url) and is_high_info(resp.content) and absolute_urls.count(abs_url) == 0:
-            absolute_urls.append(abs_url)
+        # Extract all URLs
+        urls = [a['href'] for a in soup.find_all('a', href=True)]
+
+        seen_hashes = set()
+
+        for href in urls:
+            abs_url = urljoin(url, href)
+            if is_valid(abs_url):
+                content = resp.raw_response.content
+                content_hash = hashlib.md5(content).hexdigest()
+
+                if content_hash not in seen_hashes and is_high_info(content) and abs_url not in unique_urls:
+                    absolute_urls.append(abs_url)
+                    unique_urls.add(abs_url)
+                    seen_hashes.add(content_hash)
+
     return absolute_urls
 
 
