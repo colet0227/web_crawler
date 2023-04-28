@@ -54,7 +54,7 @@ def is_valid(url):
     try:
         parsed = urlparse(url)
 
-        # UPDATE COUNT FOR EVERY SINGLE BASE PATH SO WE DONT ACCESS IT TOO MANY TIMES
+        # UPDATE COUNT FOR EVERY SINGLE BASE PATH SO WE DONT ACCESS IT MORE THAN ONCE
         base_path = parsed.path.rsplit("/", 1)[0]
         if base_path not in BASE_PATH_COUNTS:
             BASE_PATH_COUNTS[base_path] = 0
