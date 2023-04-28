@@ -5,10 +5,22 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 HIGH_INFO_THRESHOLD = .10
+SEEN_HASHES = set()
+BASE_PATH_COUNTS = {}
+
 
 def scraper(url, resp):
-    links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+    # links = extract_next_links(url, resp)
+    # return [link for link in links if is_valid(link)]
+    content = resp.raw_response.content if resp.raw_response else None
+    content_hash = hashlib.md5(content).hexdigest() if content else None
+
+    if content_hash and content_hash not in SEEN_HASHES:
+        SEEN_HASHES.add(content_hash)
+        links = extract_next_links(url, resp)
+        return [link for link in links if is_valid(link)]
+    
+    return []
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -28,17 +40,10 @@ def extract_next_links(url, resp):
         # Extract all URLs
         urls = [a['href'] for a in soup.find_all('a', href=True)]
 
-        seen_hashes = set()
-
         for href in urls:
             abs_url = urljoin(url, href)
-            if is_valid(abs_url):
-                content = resp.raw_response.content
-                content_hash = hashlib.md5(content).hexdigest()
-
-                if content_hash not in seen_hashes and is_high_info(content):
-                    absolute_urls.append(abs_url)
-                    seen_hashes.add(content_hash)
+            if is_valid(abs_url) and is_high_info(resp.raw_response.content):
+                absolute_urls.append(abs_url)
 
     return absolute_urls
 
@@ -48,6 +53,19 @@ def is_valid(url):
     # There are already some conditions that return False.
     try:
         parsed = urlparse(url)
+
+        # UPDATE COUNT FOR EVERY SINGLE BASE PATH SO WE DONT ACCESS IT TOO MANY TIMES
+        base_path = parsed.path.rsplit("/", 1)[0]
+        if base_path not in BASE_PATH_COUNTS:
+            BASE_PATH_COUNTS[base_path] = 0
+        else:
+            BASE_PATH_COUNTS[base_path] += 1
+
+            # Set a limit for the number of times the same base path can be visited
+            if BASE_PATH_COUNTS[base_path] > 1:
+                return False
+
+
         if parsed.scheme not in set(["http", "https"]):
             return False
 
@@ -82,4 +100,5 @@ def is_high_info(content):
         return False
 
     ratio = text_length / html_length
-    return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
+    return True
+    # return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
