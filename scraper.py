@@ -47,7 +47,7 @@ def scraper(url, resp):
     global SUBDOMAINS
 
     # Check if the content type is PDF; if so, skip processing
-    content_type = resp.raw_response.headers['Content-Type'] if resp.raw_response else None
+    content_type = resp.raw_response.headers.get('Content-Type') if resp.raw_response else None
     if content_type and 'application/pdf' in content_type.lower():
         return []
 
@@ -140,7 +140,7 @@ def is_valid(url):
             BASE_PATH_COUNTS[base_path] += 1
 
             # Set a limit for the number of times the same base path can be visited
-            if BASE_PATH_COUNTS[base_path] > 1:
+            if BASE_PATH_COUNTS[base_path] > 10:
                 return False
 
 
