@@ -1,25 +1,86 @@
 import re
 import hashlib
-from urllib.parse import urlparse
+import string
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from collections import Counter, defaultdict
 
-HIGH_INFO_THRESHOLD = .10
+# HIGH_INFO_THRESHOLD = .10
 SEEN_HASHES = set()
 BASE_PATH_COUNTS = {}
+
+# Longest page variables
+MAX_COUNT = 0
+LONGEST_PAGE = None
+
+# Unique pages
+UNIQUE_URL = set()
+
+# Subdomains in ics.uci.edu domain
+SUBDOMAINS = defaultdict(set)
+
+# Word counts
+WORD_COUNTS = Counter()
+STOPWORDS = {
+    'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', "aren't", 'as', 'at',
+    'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by', "can't", 'cannot', 'could', "couldn't",
+    'did', "didn't", 'do', 'does', "doesn't", 'doing', "don't", 'down', 'during', 'each', 'few', 'for', 'from', 'further',
+    'had', "hadn't", 'has', "hasn't", 'have', "haven't", 'having', 'he', "he'd", "he'll", "he's", 'her', 'here', "here's",
+    'hers', 'herself', 'him', 'himself', 'his', 'how', "how's", 'i', "i'd", "i'll", "i'm", "i've", 'if', 'in', 'into',
+    'is', "isn't", 'it', "it's", 'its', 'itself', "let's", 'me', 'more', 'most', "mustn't", 'my', 'myself', 'no', 'nor',
+    'not', 'of', 'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own',
+    'same', "shan't", 'she', "she'd", "she'll", "she's", 'should', "shouldn't", 'so', 'some', 'such', 'than', 'that', "that's",
+    'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', "there's", 'these', 'they', "they'd", "they'll", "they're",
+    "they've", 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 'very', 'was', "wasn't", 'we', "we'd", "we'll",
+    "we're", "we've", 'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while', 'who', "who's",
+    'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 'yours',
+    'yourself', 'yourselves'
+}
 
 
 def scraper(url, resp):
     # links = extract_next_links(url, resp)
     # return [link for link in links if is_valid(link)]
+##INITIAL
+    global MAX_COUNT
+    global LONGEST_PAGE
+    global SUBDOMAINS
+
+    # Check if the content type is PDF; if so, skip processing
+    content_type = resp.raw_response.headers['Content-Type'] if resp.raw_response else None
+    if content_type and 'application/pdf' in content_type.lower():
+        return []
+
     content = resp.raw_response.content if resp.raw_response else None
     content_hash = hashlib.md5(content).hexdigest() if content else None
 
-    if content_hash and content_hash not in SEEN_HASHES:
-        SEEN_HASHES.add(content_hash)
+    if content_hash:
+        # Count words in the current page
+        soup = BeautifulSoup(content, 'html.parser')
+        text_content = soup.get_text()
+        page_word_counts = count_words(text_content, STOPWORDS)
+
+        # Update the global word counts
+        WORD_COUNTS.update(page_word_counts)
+
+        # Check if the current page has more words than the previous maximum
+        if sum(page_word_counts.values()) > MAX_COUNT:
+            MAX_COUNT = sum(page_word_counts.values())
+            LONGEST_PAGE = url
+
+        # Extract next links
         links = extract_next_links(url, resp)
-        return [link for link in links if is_valid(link)]
-    
+        valid_links = [link for link in links if is_valid(link)]
+
+        # Update subdomain information
+        for abs_url in valid_links:
+            parsed_url = urlparse(abs_url)
+            if parsed_url.hostname.endswith(".ics.uci.edu"):
+                subdomain = parsed_url.hostname
+                SUBDOMAINS[subdomain].add(abs_url)
+
+        return valid_links
+
     return []
 
 def extract_next_links(url, resp):
@@ -32,6 +93,9 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+    if resp.status != 200:
+        return []
+
     absolute_urls = []
 
     if resp.raw_response and resp.raw_response.content:
@@ -42,9 +106,23 @@ def extract_next_links(url, resp):
 
         for href in urls:
             abs_url = urljoin(url, href)
-            if is_valid(abs_url) and is_high_info(resp.raw_response.content):
+            # if is_valid(abs_url) and is_high_info(resp.raw_response.content) and abs_url not in SEEN_HASHES:
+            if is_valid(abs_url) and abs_url not in SEEN_HASHES:
+                parsed_url = urlparse(url)._replace(fragment='')  # remove the fragment part
+                UNIQUE_URL.add(parsed_url.geturl())  # add the URL to a set
+                
                 absolute_urls.append(abs_url)
-
+                SEEN_HASHES.add(abs_url)
+    
+    # Printing
+    print(len(UNIQUE_URL))
+    print()
+    print(WORD_COUNTS.most_common(50))
+    print()
+    print(f"The longest page is '{LONGEST_PAGE}' with {MAX_COUNT} words.")
+    print()
+    for subdomain, pages in sorted(SUBDOMAINS.items()):
+        print(f"{subdomain}, {len(pages)}")
     return absolute_urls
 
 def is_valid(url):
@@ -89,16 +167,22 @@ def is_valid(url):
     
 # Ensure that the content from the webpage provides a reasonable amount of information
 # Should prevent crawling large files that provide little textual info
-def is_high_info(content):
-    soup = BeautifulSoup(content, 'html.parser')
-    text_content = soup.get_text()
-    text_length = len(text_content)
-    html_length = len(content)
+# def is_high_info(content):
+    # soup = BeautifulSoup(content, 'html.parser')
+    # text_content = soup.get_text()
+    # text_length = len(text_content)
+    # html_length = len(content)
 
-    # If no information return False
-    if html_length == 0:
-        return False
+    # # If no information return False
+    # if html_length == 0:
+    #     return False
 
-    ratio = text_length / html_length
-    return True
+    # ratio = text_length / html_length
+    # return True
     # return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
+
+def count_words(text, stop_words):
+    words = re.findall(r"\b[\w']+\b", text.lower())
+    # Count words, ignoring stop words
+    word_counts = Counter(word for word in words if len(word) > 1 and word not in STOPWORDS)
+    return word_counts
