@@ -1,7 +1,7 @@
 import re
 import hashlib
 import string
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urlunparse
 from bs4 import BeautifulSoup
 from collections import Counter, defaultdict
 
@@ -106,6 +106,7 @@ def extract_next_links(url, resp):
 
         for href in urls:
             abs_url = urljoin(url, href)
+            abs_url = defragment_url(abs_url)  # Defragment the URL
             # if is_valid(abs_url) and is_high_info(resp.raw_response.content) and abs_url not in SEEN_HASHES:
             if is_valid(abs_url) and abs_url not in SEEN_HASHES:
                 parsed_url = urlparse(url)._replace(fragment='')  # remove the fragment part
@@ -140,7 +141,7 @@ def is_valid(url):
             BASE_PATH_COUNTS[base_path] += 1
 
             # Set a limit for the number of times the same base path can be visited
-            if BASE_PATH_COUNTS[base_path] > 10:
+            if BASE_PATH_COUNTS[base_path] > 1:
                 return False
 
 
@@ -186,3 +187,12 @@ def count_words(text, stop_words):
     # Count words, ignoring stop words
     word_counts = Counter(word for word in words if len(word) > 1 and word not in STOPWORDS)
     return word_counts
+
+def defragment_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+    # Set the fragment part to an empty string
+    parsed_url = parsed_url._replace(fragment='')
+    # Convert the parsed URL back to a string
+    defragmented_url = urlunparse(parsed_url)
+    return defragmented_url
