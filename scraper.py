@@ -3,11 +3,13 @@ import hashlib
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+import urllib.parse
 
 HIGH_INFO_THRESHOLD = .10
 SEEN_HASHES = set()
 BASE_PATH_COUNTS = {}
 
+UNIQUE_URL = set()
 
 def scraper(url, resp):
     # links = extract_next_links(url, resp)
@@ -43,6 +45,8 @@ def extract_next_links(url, resp):
         for href in urls:
             abs_url = urljoin(url, href)
             if is_valid(abs_url) and is_high_info(resp.raw_response.content):
+                parsed_url = urllib.parse.urlparse(url)._replace(fragment='')  # remove the fragment part
+                UNIQUE_URL.add(parsed_url.geturl())  # add the URL to a set
                 absolute_urls.append(abs_url)
 
     return absolute_urls
