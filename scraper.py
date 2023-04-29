@@ -1,13 +1,23 @@
 import re
-import hashlib
+# import hashlib
 import string
-from urllib.parse import urlparse, urljoin, urlunparse
+from urllib.parse import urlparse, urljoin, urlunparse, parse_qsl, urlencode
 from bs4 import BeautifulSoup
+# from simhash import Simhash
 from collections import Counter, defaultdict
+from hashlib import sha256
+
+###
+# Set to store SimHash values of seen pages
+SEEN_FINGERPRINTS = set()
+
+# Threshold for similarity
+SIMILARITY_THRESHOLD = .8
+###
 
 # HIGH_INFO_THRESHOLD = .10
-SEEN_HASHES = set()
-BASE_PATH_COUNTS = {}
+# SEEN_HASHES = set()
+# BASE_PATH_COUNTS = {}
 
 # Longest page variables
 MAX_COUNT = 0
@@ -52,9 +62,8 @@ def scraper(url, resp):
         return []
 
     content = resp.raw_response.content if resp.raw_response else None
-    content_hash = hashlib.md5(content).hexdigest() if content else None
 
-    if content_hash:
+    if content:
         # Count words in the current page
         soup = BeautifulSoup(content, 'html.parser')
         text_content = soup.get_text()
@@ -93,27 +102,35 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+    # Ensure it's a 200 status
     if resp.status != 200:
         return []
 
     absolute_urls = []
 
     if resp.raw_response and resp.raw_response.content:
-        soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+        content = resp.raw_response.content
+        soup = BeautifulSoup(content, 'html.parser')
 
-        # Extract all URLs
-        urls = [a['href'] for a in soup.find_all('a', href=True)]
+        # Calculate the SimHash fingerprint for the current page's content
+        fingerprint = simhash(soup.get_text())
 
-        for href in urls:
-            abs_url = urljoin(url, href)
-            abs_url = defragment_url(abs_url)  # Defragment the URL
-            # if is_valid(abs_url) and is_high_info(resp.raw_response.content) and abs_url not in SEEN_HASHES:
-            if is_valid(abs_url) and abs_url not in SEEN_HASHES:
-                parsed_url = urlparse(url)._replace(fragment='')  # remove the fragment part
-                UNIQUE_URL.add(parsed_url.geturl())  # add the URL to a set
-                
-                absolute_urls.append(abs_url)
-                SEEN_HASHES.add(abs_url)
+        # Check if the fingerprint is similar to any previously seen fingerprint
+        is_similar = any(similarity(fingerprint, fp) >= SIMILARITY_THRESHOLD for fp in SEEN_FINGERPRINTS)
+
+        # If the fingerprint is not similar to any seen fingerprint, process the page
+        if not is_similar:
+            # Add the fingerprint to the set of seen fingerprints
+            SEEN_FINGERPRINTS.add(fingerprint)
+
+            # Extract all URLs
+            urls = [a['href'] for a in soup.find_all('a', href=True)]
+
+            for href in urls:
+                abs_url = urljoin(url, href)
+                abs_url = defragment_url(abs_url)  # Defragment the URL
+                if is_valid(abs_url):
+                    absolute_urls.append(abs_url)
     
     # Printing
     print(len(UNIQUE_URL))
@@ -130,20 +147,12 @@ def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
+    # Make sure the length of a url isn't too long
+    if len(url) >= 2000:
+            return False
+
     try:
         parsed = urlparse(url)
-
-        # UPDATE COUNT FOR EVERY SINGLE BASE PATH SO WE DONT ACCESS IT MORE THAN ONCE
-        base_path = parsed.path.rsplit("/", 1)[0]
-        if base_path not in BASE_PATH_COUNTS:
-            BASE_PATH_COUNTS[base_path] = 0
-        else:
-            BASE_PATH_COUNTS[base_path] += 1
-
-            # Set a limit for the number of times the same base path can be visited
-            if BASE_PATH_COUNTS[base_path] > 1:
-                return False
-
 
         if parsed.scheme not in set(["http", "https"]):
             return False
@@ -166,22 +175,6 @@ def is_valid(url):
         print("TypeError for ", parsed)
         raise
     
-# Ensure that the content from the webpage provides a reasonable amount of information
-# Should prevent crawling large files that provide little textual info
-# def is_high_info(content):
-    # soup = BeautifulSoup(content, 'html.parser')
-    # text_content = soup.get_text()
-    # text_length = len(text_content)
-    # html_length = len(content)
-
-    # # If no information return False
-    # if html_length == 0:
-    #     return False
-
-    # ratio = text_length / html_length
-    # return True
-    # return ratio > HIGH_INFO_THRESHOLD  # Adjust the threshold as needed
-
 def count_words(text, stop_words):
     words = re.findall(r"\b[\w']+\b", text.lower())
     # Count words, ignoring stop words
@@ -196,3 +189,52 @@ def defragment_url(url):
     # Convert the parsed URL back to a string
     defragmented_url = urlunparse(parsed_url)
     return defragmented_url
+
+# def is_relevant(content):
+#     # Generate the BLAKE2 hash value for the content
+#     hash_value = hashlib.blake2b(content, digest_size=32).hexdigest()
+    
+#     # Check if the hash value is already in the set of seen hashes
+#     if hash_value in SEEN_HASHES:
+#         # Similar to an existing page, not relevant
+#         return False
+    
+#     # Not similar to any existing page, add to set and consider relevant
+#     SEEN_HASHES.add(hash_value)
+#     return True
+
+def tokenize(content):
+    # Use a regular expression to extract alphanumeric tokens (words and numbers)
+    pattern = re.compile(r'[a-zA-Z0-9]+')
+    tokens = pattern.findall(content.lower())
+    return tokens
+
+def simhash(text):
+    # Step 1: Tokenize the text and calculate word frequencies (weights)
+    tokens = tokenize(text)
+    token_weights = Counter(tokens)
+
+    # Step 2: Generate b-bit hash values for each token
+    hash_values = {token: int(sha256(token.encode()).hexdigest(), 16) % (2 ** 64) for token in token_weights}
+
+    # Step 3: Create a b-dimensional vector V and update its components
+    V = [0] * 64
+    for token, weight in token_weights.items():
+        hash_value = hash_values[token]
+        for i in range(64):
+            bit = (hash_value >> i) & 1
+            V[i] += weight if bit == 1 else -weight
+
+    # Step 4: Generate the b-bit fingerprint
+    fingerprint = 0
+    for i, value in enumerate(V):
+        if value > 0:
+            fingerprint |= (1 << i)
+
+    return fingerprint
+
+def similarity(hash1, hash2):
+    # Compute the similarity between two hash values (fingerprint)
+    xor_result = hash1 ^ hash2
+    different_bits = bin(xor_result).count('1')
+    return 1 - (different_bits / 64)
