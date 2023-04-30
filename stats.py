@@ -81,7 +81,6 @@ class Stats:
         return temp
 
     def print_top(self) -> None:
-        # print(self.wordsHash.most_common(50))
         # Filter out stopwords from the Counter object
         filtered_wordsHash = Counter({word: count for word, count in self.wordsHash.items() if word not in self.STOPWORDS})
 
