@@ -5,6 +5,7 @@ class Stats:
     def __init__(self) -> None:
         self.uniquePages = set()
         self.allPages = set()
+        self.fingerprints = set()
         self.wordsHash = Counter()
         self.longestFile = ""
         self.num = 0
@@ -80,7 +81,15 @@ class Stats:
         return temp
 
     def print_top(self) -> None:
-        print(self.wordsHash.most_common(5))
+        # print(self.wordsHash.most_common(50))
+        # Filter out stopwords from the Counter object
+        filtered_wordsHash = Counter({word: count for word, count in self.wordsHash.items() if word not in self.STOPWORDS})
+
+        # Get the top 50 words (excluding stopwords)
+        top_50_words = filtered_wordsHash.most_common(50)
+
+        # Print the top 50 words
+        print(top_50_words)
     
     def get_subdomains(self):
         return self.subdomains
@@ -91,3 +100,9 @@ class Stats:
             if parsed_url.hostname.endswith(".ics.uci.edu"):
                 subdomain = parsed_url.hostname
                 self.subdomains[subdomain].add(abs_url)
+    
+    def add_fingerprints(self, url):
+        self.fingerprints.add(url)
+    
+    def get_fingerprints(self):
+        return self.fingerprints
