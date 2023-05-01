@@ -7,15 +7,18 @@ import hashlib
 from hashlib import sha256, blake2b
 
 stat = Stats()
+LOW_CONTENT = 50
+LOW_INFO_THRESHOLD = .1
+SIMILARITY_THRESHOLD = .85
+BITS = 64
 
 def scraper(url, resp):
     # Means there was an error so stop execution of this file
     if resp.status != 200:
         return []
 
+    # Add the unique page
     global stat
-
-    stat.set_allPages(url)
     stat.set_unique(urldefrag(url)[0])
 
     # Content of the page if there is content, else return empty list and stop execution
@@ -34,6 +37,8 @@ def scraper(url, resp):
         stat.set_longest(url)
 
     links = extract_next_links(url, resp)
+
+    # Print our stats
     print(len(stat.get_unique()))
     print()
     print(f"Longest File: {stat.get_longest()} with {stat.num} words")
@@ -68,7 +73,7 @@ def extract_next_links(url, resp) -> list:
             # If the page has low information content, skip further processing
             return []
     fingerprint = simhash(text_info)
-    is_similar = any(similarity(fingerprint, fp) >= .85 for fp in stat.get_fingerprints())
+    is_similar = any(similarity(fingerprint, fp) >= SIMILARITY_THRESHOLD for fp in stat.get_fingerprints())
     urls = []
     if not is_similar:
         stat.add_fingerprints(fingerprint)
@@ -98,8 +103,9 @@ def is_valid(url):
         if not (parsed.hostname.lower().endswith("ics.uci.edu") or parsed.hostname.lower().endswith("cs.uci.edu") or parsed.hostname.lower().endswith("informatics.uci.edu") or parsed.hostname.lower().endswith("stat.uci.edu")):
             return False
 
+        # Make sure the file types are valid
         return not re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico|mpg|img|war|apk"
+            r".*\.(css|js|bmp|gif|jpe?g|ico|mpg|img|war|apk|json"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|ppsx"
@@ -113,10 +119,12 @@ def is_valid(url):
         raise
 
 def count_words(text: str) -> bool:
+    # Ignore non alphanumeric characters and replace them with a space
+    # Split into a list
     global stat
     words = re.sub('[^0-9a-zA-Z]+', ' ', text).lower().split()
     temp = 0
-    # Count words, ignoring stop words
+    # Count each word while ignoring stopwords
     for word in words:
         temp += 1
         if len(word) > 1 and stat.is_valid(word):
@@ -129,34 +137,52 @@ def count_words(text: str) -> bool:
 
 def simhash(text):
     # Tokenize the text and calculate word frequencies (weights)
-    tokens = text.split()
+    # tokens = text.split()
+    tokens = re.findall(r'[a-zA-Z0-9]+', text)
+
+    # The result is a dictionary where the keys are tokens and the values are their frequencies (weights).
     token_weights = Counter(tokens)
 
-    # Generate b-bit hash values for each token
+    # Generate 64-bit hash values for each token
     # Converts the resulting hash (which is in hexadecimal format) to an integer using base 16.
+    # Digest size of 8 is in bytes which is 64 bits, converts hex into integer before putting it in dictionary
     hash_values = {token: int(blake2b(token.encode(), digest_size=8).hexdigest(), 16) for token in token_weights}
 
-    # Create a b-dimensional vector V and update its components
-    V = [0] * 64
+    # Create a 64-dimensional vector V and update its components
+    V = [0] * BITS
     for token, weight in token_weights.items():
         hash_value = hash_values[token]
-        for i in range(64):
-            bit = (hash_value >> i) & 1
-            V[i] += weight if bit == 1 else -weight
 
-    # Generate the b-bit fingerprint
+        # Loop over each bit position in the 64-bit hash value for every hash_value
+        for i in range(BITS):
+
+            # Extract ith bit with bitwise shift operator
+            bit = (hash_value >> i) & 1
+            if (bit == 1):
+                V[i] += weight
+            else:
+                V[i] -= weight
+
+    # Generate the 64-bit fingerprint
     fingerprint = 0
     for i, value in enumerate(V):
         if value > 0:
+            # (1 << i) sets as binary number with ith bit as 1
+            # Bitwise or that with the fingerprint and set fingerprint to the value
             fingerprint |= (1 << i)
 
+    # Return simhash fingerprint
     return fingerprint
 
 def similarity(hash1, hash2):
     # Compute the similarity between two hash values (fingerprint)
     xor_result = hash1 ^ hash2
+
+    # Convert the XOR result to a binary string and count the number of 1 bits, which represents the number of different bits
     different_bits = bin(xor_result).count('1')
-    return 1 - (different_bits / 64)
+
+    # Calculate the similarity between the two hash values as the fraction of bits that are the same
+    return 1 - (different_bits / BITS)
 
 def is_high_information_content(content):
     # Tokenize the content into words
@@ -172,10 +198,10 @@ def is_high_information_content(content):
     total_words = len(words)
     
     # Calculate the information content ratio
-    if total_words <= 50:
+    if total_words <= LOW_CONTENT:
         return False  # Avoid division by zero and if there aren't very many tokens
     info_content_ratio = num_unique_words / total_words
     
     # Check if the ratio is above the threshold
     # return info_content_ratio >= .04
-    return info_content_ratio >= .1
+    return info_content_ratio >= LOW_INFO_THRESHOLD
