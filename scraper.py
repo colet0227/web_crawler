@@ -25,19 +25,15 @@ def scraper(url, resp):
 
     # Create soup and update word counter
     soup = BeautifulSoup(content, 'html.parser')
-    # fingerprint = simhash(soup.get_text())
 
     # Check if the fingerprint is similar to any previously seen fingerprint
-    # is_similar = any(similarity(fingerprint, fp) >= .8 for fp in SEEN_FINGERPRINTS)
     text_content = soup.get_text()
-    # if similarityCheck(text_content, url):
-    #     return []
+
     # If count words is greater than current max then update the longest file URL
     if count_words(text_content):
         stat.set_longest(url)
 
     links = extract_next_links(url, resp)
-    # print(f"URL: {url}")
     print(len(stat.get_unique()))
     print()
     print(f"Longest File: {stat.get_longest()} with {stat.num} words")
@@ -49,12 +45,10 @@ def scraper(url, resp):
     print()
     print()
 
-    # return [link for link in links if is_valid(link)]
-
     valid_links = [link for link in links if is_valid(link)]
-    # Update subdomain information
-    stat.add_subdomains(valid_links)
 
+    # Update subdomain information and return
+    stat.add_subdomains(valid_links)
     return valid_links
 
 
@@ -79,7 +73,6 @@ def extract_next_links(url, resp) -> list:
     if not is_similar:
         stat.add_fingerprints(fingerprint)
         for a in soup.find_all('a', href=True):
-            # u = (normalize_url(defragment_url(urljoin(url, a['href']))))
             # Get the defragmented URL
             defrag_result = urldefrag(urljoin(url, a['href']))
             # Extract the URL string from the DefragResult object
@@ -105,9 +98,6 @@ def is_valid(url):
         if not (parsed.hostname.lower().endswith("ics.uci.edu") or parsed.hostname.lower().endswith("cs.uci.edu") or parsed.hostname.lower().endswith("informatics.uci.edu") or parsed.hostname.lower().endswith("stat.uci.edu")):
             return False
 
-        # if len(url) > 2083:
-        #     return False
-
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico|mpg|img|war|apk"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
@@ -121,28 +111,6 @@ def is_valid(url):
     except TypeError:
         print("TypeError for ", parsed)
         raise
-
-
-# def defragment_url(url):
-#     # Parse the URL
-#     parsed_url = urlparse(url)
-#     # Set the fragment part to an empty string
-#     parsed_url = parsed_url._replace(fragment='')
-#     # Convert the parsed URL back to a string
-#     defragmented_url = urlunparse(parsed_url)
-#     return defragmented_url
-
-
-# def normalize_url(url):
-#     # Parse the URL
-#     parsed_url = urlparse(url)
-#     # Sort the query parameters alphabetically
-#     sorted_query_params = sorted(parse_qsl(parsed_url.query))
-#     # Reconstruct the URL with the sorted query parameters
-#     normalized_url = parsed_url._replace(query=urlencode(sorted_query_params))
-#     # Convert the parsed URL back to a string
-#     return urlunparse(normalized_url)
-
 
 def count_words(text: str) -> bool:
     global stat
@@ -160,39 +128,15 @@ def count_words(text: str) -> bool:
     return False
 
 def simhash(text):
-    # # Step 1: Tokenize the text and calculate word frequencies (weights)
-    # tokens = text.split()
-    # token_weights = Counter(tokens)
-
-    # # Step 2: Generate b-bit hash values for each token
-    # # Converts the resulting hash (which is in hexadecimal format) to an integer using base 16.
-    # # Calculates the modulo of the integer hash value with 2 ** 64 to limit the hash value to 64 bits.
-    # hash_values = {token: int(sha256(token.encode()).hexdigest(), 16) % (2 ** 64) for token in token_weights}
-
-    # # Step 3: Create a b-dimensional vector V and update its components
-    # V = [0] * 64
-    # for token, weight in token_weights.items():
-    #     hash_value = hash_values[token]
-    #     for i in range(64):
-    #         bit = (hash_value >> i) & 1
-    #         V[i] += weight if bit == 1 else -weight
-
-    # # Step 4: Generate the b-bit fingerprint
-    # fingerprint = 0
-    # for i, value in enumerate(V):
-    #     if value > 0:
-    #         fingerprint |= (1 << i)
-
-    # return fingerprint
-    # Step 1: Tokenize the text and calculate word frequencies (weights)
+    # Tokenize the text and calculate word frequencies (weights)
     tokens = text.split()
     token_weights = Counter(tokens)
 
-    # Step 2: Generate b-bit hash values for each token
+    # Generate b-bit hash values for each token
     # Converts the resulting hash (which is in hexadecimal format) to an integer using base 16.
     hash_values = {token: int(blake2b(token.encode(), digest_size=8).hexdigest(), 16) for token in token_weights}
 
-    # Step 3: Create a b-dimensional vector V and update its components
+    # Create a b-dimensional vector V and update its components
     V = [0] * 64
     for token, weight in token_weights.items():
         hash_value = hash_values[token]
@@ -200,7 +144,7 @@ def simhash(text):
             bit = (hash_value >> i) & 1
             V[i] += weight if bit == 1 else -weight
 
-    # Step 4: Generate the b-bit fingerprint
+    # Generate the b-bit fingerprint
     fingerprint = 0
     for i, value in enumerate(V):
         if value > 0:
@@ -235,30 +179,3 @@ def is_high_information_content(content):
     # Check if the ratio is above the threshold
     # return info_content_ratio >= .04
     return info_content_ratio >= .1
-
-
-# def similarityCheck(url_content: str, url) -> bool:
-#     global stat
-#     h = hashlib.sha1()
-#     h1 = hashlib.sha1()
-#     for resp in stat.get_responses():
-#         # Check to see if same page
-#         if resp.url != url:
-#             content = resp.raw_response.content if resp.raw_response else None
-#             if not content:
-#                 return False
-#             # Create soup and update word counter
-#             soup = BeautifulSoup(content, 'html.parser')
-#             p_content = soup.get_text()
-#             h.update(p_content.encode('utf-8'))
-#             hash_page = h.hexdigest()
-#             h1.update(url_content.encode('utf-8'))
-#             hash_current = h1.hexdigest()
-#             # threshold to compare and calculate similarity between the two
-#             threshold = int(len(hash_page) * 0.2)
-#             # Check if hash values are within threshold
-#             if abs(int(hash_current, 16) - int(hash_page, 16)) <= threshold:
-#                 # Less than threshold means similar
-#                 return True
-#     # None are similar
-#     return False
