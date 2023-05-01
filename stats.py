@@ -4,7 +4,6 @@ import urllib.parse
 class Stats:
     def __init__(self) -> None:
         self.uniquePages = set()
-        self.allPages = set()
         self.fingerprints = set()
         self.wordsHash = Counter()
         self.longestFile = ""
@@ -25,60 +24,50 @@ class Stats:
             'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 'yours',
             'yourself', 'yourselves'
         }
-        self.responses = set()
 
     def get_unique(self) -> set:
+        # Get unique pages
         return self.uniquePages
 
     def set_unique(self, url: str) -> None:
+        # Set unique pages
         self.uniquePages.add(url)
 
-    def get_allPages(self) -> set:
-        return self.allPages
-
-    def set_allPages(self, url: str) -> None:
-        self.allPages.add(url)
-
     def get_top(self):
+        # Get top 50 words
         return self.wordsHash.most_common(50)
 
     def get_longest(self) -> str:
+        # Get longest
         return self.longestFile
 
     def set_longest(self, file: str) -> None:
+        # Set longest file
         self.longestFile = file
 
     def add_words(self, word: str) -> None:
+        # Add words
         self.wordsHash[word] += 1
 
     def set_unique(self, url: str) -> None:
+        # Add a unique page
         self.uniquePages.add(url)
 
     def get_num(self) -> int:
+        # Get num for longest
         return self.num
 
     def set_num(self, num: int) -> None:
+        # Set num for longest
         self.num = num
 
     def get_stopWords(self) -> set:
+        # Get stop words
         return self.STOPWORDS
-    
-    def get_responses(self) -> set:
-        return self.responses
-
-    def set_responses(self, resp) -> None:
-        self.responses.add(resp)
 
     def is_valid(self, word: str) -> bool:
+        # Ensure no stop words count for the longest file
         return not (word in self.STOPWORDS)
-    
-    def get_icsDomain(self) -> int:
-        temp = 0
-        for page in self.allPages:
-            domain_name = urllib.parse.urlparse(page).hostname
-            if domain_name.endswith(".ics.uci.edu"):
-                temp += 1
-        return temp
 
     def print_top(self) -> None:
         # Filter out stopwords from the Counter object
@@ -91,9 +80,11 @@ class Stats:
         print(top_50_words)
     
     def get_subdomains(self):
+        # Get subdomains
         return self.subdomains
     
     def add_subdomains(self, links):
+        # Add subdomains
         for abs_url in links:
             parsed_url = urllib.parse.urlparse(abs_url)
             if parsed_url.hostname.endswith(".ics.uci.edu"):
@@ -101,7 +92,9 @@ class Stats:
                 self.subdomains[subdomain].add(abs_url)
     
     def add_fingerprints(self, url):
+        # Add a fingerprint
         self.fingerprints.add(url)
     
     def get_fingerprints(self):
+        # Get fingerprints
         return self.fingerprints
